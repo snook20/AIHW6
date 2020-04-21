@@ -38,6 +38,8 @@ class AIPlayer(Player):
         self.turnCount = 0
 
         self.utilities = []
+        self.loadUtility()
+        print(str(self.utilities))
 
 
     ##
@@ -155,13 +157,19 @@ class AIPlayer(Player):
         scores.append(self.calcUtility(state,move,0))
         self.utilities.append(scores)
 
-
+    #calculates utility for state passed in
+    # params:
+    #   state -
+    #   move - 
     def calcUtility(self, state, move, currUtil):
         reward = self.calcReward(state)
         nextState = getNextStateAdversarial(state, move)
         return currUtil + self.alpha * (reward + (self.discount*self.lookupUtility(nextState))-currUtil)
 
 
+    # checks to see if state exists in utilities list
+    # if true: return the utility
+    # else: return 0
     def lookupUtility(self, state):
         scores = self.stateScore(state)
         for utility in self.utilities:
@@ -179,6 +187,8 @@ class AIPlayer(Player):
         workers = getAntList(state, state.whoseTurn, (WORKER,))
         food, drop, foodToDropdist = self.minFoodSpots(state)
 
+        if len(workers) == 0:
+            return [-1,-1,0]
         ant = workers[0]
         if ant.carrying:
             dist = stepsToReach(state, ant.coords, drop.coords)
@@ -193,7 +203,6 @@ class AIPlayer(Player):
         # estimate on how many turns it will take to reach food needed - 1
         stepsToWin = (foodNeeded - 1) * ((foodToDropdist*2) + 2)/len(workers)
 
-        print(stepsToFood, stepsToWin, len(workers))
         return [stepsToFood, stepsToWin, len(workers)]
 
     # helper for stepsToFood
@@ -228,11 +237,15 @@ class AIPlayer(Player):
 
     # at the end of each game same the utilities to a file in case of a crash
     def saveUtility(self):
-        pass
+        f = open("states.txt", "w")
+        for utility in self.utilities:
+            f.write(str(utility) + "\n")
+        f.close()
 
     # load in utilies from file
     def loadUtility(self):
-        pass
+        with open('../states.txt') as f:
+            self.utilities = [line.rstrip() for line in f]
 
     ##
     # registerWin
@@ -242,4 +255,3 @@ class AIPlayer(Player):
     def registerWin(self, hasWon):
         #save utilities
         self.saveUtility()
-
