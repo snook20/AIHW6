@@ -39,7 +39,6 @@ class AIPlayer(Player):
 
         self.utilities = []
         self.loadUtility()
-        print(str(self.utilities))
 
 
     ##
@@ -136,34 +135,42 @@ class AIPlayer(Player):
             nextState = getNextStateAdversarial(state, move)
             scores = self.stateScore(nextState)
             for utility in self.utilities:
-              if scores[0] == utility[0] and scores[1] == utility[1] and scores[2] == utility[2]:
-                  if utility[3] > bestMoveUtil:
-                      bestMove = move
-                      bestMoveUtil = utility[3]
+                for i in range(len(utility)-1):
+                    if scores[i] != utility[i]:
+                        break
+                    if i == len(utility)-2:
+                        if utility[len(utility)-1] > bestMoveUtil:
+                            bestMove = move
+                            bestMoveUtil = utility[len(utility)-1]
 
         return bestMove
 
     #updates the utility for the given state
     def updateUtility(self, state, move):
         scores = self.stateScore(state)
-
         #check to see if state already exists in utilities list
         for utility in self.utilities:
-            if scores[0] == utility[0] and scores[1] == utility[1] and scores[2] == utility[2]:
-                utility[3] = self.calcUtility(state, move, utility[3])
-                return
+            #[0,1,2,3,4,5]
+            for i in range(len(utility) - 1):
+                if scores[i] != utility[i]:
+                    break
+                if i == len(utility) - 2:
+                    utility[len(utility)-1] = self.calcUtility(state, move, utility[len(utility)-1])
+                    return
 
         #if state doesn't exist calc utility and add to utilities list
         scores.append(self.calcUtility(state,move,0))
         self.utilities.append(scores)
 
+
     #calculates utility for state passed in
     # params:
-    #   state -
-    #   move - 
+    #   state - current state
+    #   move - the move that you will make from the state passed in
+    #   currUtil - current utility of curr state
     def calcUtility(self, state, move, currUtil):
-        reward = self.calcReward(state)
         nextState = getNextStateAdversarial(state, move)
+        reward = self.calcReward(nextState)
         return currUtil + self.alpha * (reward + (self.discount*self.lookupUtility(nextState))-currUtil)
 
 
@@ -173,37 +180,67 @@ class AIPlayer(Player):
     def lookupUtility(self, state):
         scores = self.stateScore(state)
         for utility in self.utilities:
-            if scores[0] == utility[0] and scores[1] == utility[1] and scores[2] == utility[2]:
-                return utility[3]
+            for i in range(len(utility) - 1):
+                if scores[i] != utility[i]:
+                    break
+                if i == len(utility) - 2:
+                    return utility[3]
         return 0
 
     #calculates the reward for being in state
     def calcReward(self, state):
-        return 0
+        if getWinner(state) == 1:
+            return 1
+        if getWinner(state) == 0:
+            return -1
+
+        return -0.01 + getCurrPlayerInventory(state).foodCount/99 - len(getAntList(state, state.whoseTurn, (WORKER,)))/99
 
 
     #returns number of steps to gain 1 food, steps to win, number of workers
     def stateScore(self,state):
+        categories = []
+
         workers = getAntList(state, state.whoseTurn, (WORKER,))
         food, drop, foodToDropdist = self.minFoodSpots(state)
 
-        if len(workers) == 0:
-            return [-1,-1,0]
-        ant = workers[0]
-        if ant.carrying:
-            dist = stepsToReach(state, ant.coords, drop.coords)
+        if len(workers) != 0:
+            ant = workers[0]
+            if ant.carrying:
+                dist = stepsToReach(state, ant.coords, drop.coords)
+            else:
+                dist = stepsToReach(state, ant.coords, food.coords) + foodToDropdist
+
+            categories.append(dist)
         else:
-            dist = stepsToReach(state, ant.coords, food.coords) + foodToDropdist
-
-        stepsToFood = dist
-
+            categories.append(-1)
         # food still needed
         foodNeeded = 11 - getCurrPlayerInventory(state).foodCount
 
         # estimate on how many turns it will take to reach food needed - 1
-        stepsToWin = (foodNeeded - 1) * ((foodToDropdist*2) + 2)/len(workers)
+        categories.append((foodNeeded - 1) * ((foodToDropdist*2) + 2))
 
-        return [stepsToFood, stepsToWin, len(workers)]
+        enemyInv = getEnemyInv(None, state)
+        ourInv = getCurrPlayerInventory(state)
+
+        #categories.append(len(workers))
+        categories.append(enemyInv.foodCount)
+        categories.append(ourInv.foodCount)
+        if not enemyInv.getQueen:
+            categories.append(0)
+        else:
+            categories.append(enemyInv.getQueen().health)
+
+        if not ourInv.getQueen:
+            categories.append(0)
+        else:
+            categories.append(ourInv.getQueen().health)
+
+        categories.append(ourInv.getAnthill().captureHealth)
+        categories.append(enemyInv.getAnthill().captureHealth)
+
+        return categories
+        #return [stepsToFood, stepsToWin, len(workers), enemyInv.foodCount, ourInv.foodCount, enemyInv.getQueen().health, ourInv.getQueen().health, ourInv.getAnthill().captureHealth, enemyInv.getAnthill().captureHealth ]
 
     # helper for stepsToFood
     # returns bestFood, bestBuilding, distance between the two
@@ -246,6 +283,7 @@ class AIPlayer(Player):
     def loadUtility(self):
         with open('../states.txt') as f:
             self.utilities = [line.rstrip() for line in f]
+
 
     ##
     # registerWin
